@@ -20,18 +20,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
 
-      - uses: android-actions/setup-android@v3
+      # El servidor de GitHub ya trae el Android SDK (ANDROID_HOME).
+      - name: Revisar Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/build-tools" | tail -3
+          ls "$ANDROID_HOME/platforms" | tail -3
 
       - name: Generar proyecto Android (Bubblewrap)
         working-directory: android
