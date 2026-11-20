@@ -34,6 +34,6 @@
   "isChromeOSOnly": false,
   "isMetaQuest": false,
   "fullScopeUrl": "https://stop-dominicano.onrender.com/",
-  "minSdkVersion": 21,
+  "minSdkVersion": 24,
   "orientationLock": false
 }
