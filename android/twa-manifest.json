@@ -17,7 +17,7 @@
   "maskableIconUrl": "https://stop-dominicano.onrender.com/icons/maskable-512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
-    "path": "./stop-dominicano.keystore",
+    "path": "./android.keystore",
     "alias": "stop"
   },
   "appVersionName": "1.0.0",
@@ -27,7 +27,9 @@
   "webManifestUrl": "https://stop-dominicano.onrender.com/manifest.webmanifest",
   "fallbackType": "customtabs",
   "features": {},
-  "alphaDependencies": { "enabled": false },
+  "alphaDependencies": {
+    "enabled": false
+  },
   "enableSiteSettingsShortcut": true,
   "isChromeOSOnly": false,
   "isMetaQuest": false,

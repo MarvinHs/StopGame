@@ -15,20 +15,20 @@ El juego ya está preparado: se puede instalar como app (PWA), tiene íconos, fu
 - Entra a https://play.google.com/console y paga la inscripción (25 dólares, una sola vez).
 - Una **cuenta personal nueva** tiene que hacer una **prueba cerrada con al menos 12 personas durante 14 días** antes de poder publicar para todo el mundo. Ve buscando esas 12 personas (familia, clientes, panas).
 
-## Paso 2 — Generar la app (.aab) con PWABuilder (sin instalar nada)
-1. Abre https://www.pwabuilder.com y pega `https://stop-dominicano.onrender.com`.
-2. Haz clic en **Package for stores → Android → Generate Package**.
-3. En las opciones pon:
-   - **Package ID:** `com.soportesrd.stopdominicano`
-   - **App name:** `STOP Dominicano` · **Launcher name:** `STOP`
-   - **Version:** `1.0.0` · **Version code:** `1`
-   - **Signing key:** *Create new* (que la cree PWABuilder)
-4. Descarga el `.zip`. Adentro vienen:
-   - `app-release-bundle.aab` → lo que se sube a Play.
-   - `signing.keystore` y `signing-key-info.txt` → **guárdalos en un lugar seguro y haz copia.** Sin esa llave no podrás actualizar la app nunca más.
-   - `assetlinks.json` → contiene la huella (SHA-256) de tu llave.
+## Paso 2 — Generar la app (.aab) con GitHub Actions
+El repo trae un proceso automático (`.github/workflows/android.yml`) que arma la app en los servidores de GitHub con Bubblewrap, la misma herramienta que usa PWABuilder.
 
-> Si prefieres hacerlo en tu PC: `npm i -g @bubblewrap/cli`, luego `bubblewrap init --manifest https://stop-dominicano.onrender.com/manifest.webmanifest` (o usa el `twa-manifest.json` de esta carpeta) y `bubblewrap build`. Necesitas Java 17 y te descarga el Android SDK.
+1. **Una sola vez:** en GitHub → repo StopGame → **Settings → Secrets and variables → Actions → New repository secret**, crea:
+   - `ANDROID_KEYSTORE_BASE64`: todo el contenido de `keystore-base64.txt`, el archivo que viene con tu llave de firma.
+   - `ANDROID_KEYSTORE_PASSWORD`: la contraseña de la llave, que está en `LEEME-GUARDAR.txt`.
+2. Ve a **Actions → App Android (Google Play) → Run workflow**. En cada actualización de la app pon un *Número de versión* mayor (2, 3…).
+3. Cuando termine (unos 5 minutos), abre la corrida y descarga **stop-dominicano-android**. Adentro vienen:
+   - `stop-dominicano.aab`: el archivo que se sube a Play.
+   - `stop-dominicano.apk`: para instalarlo directo en un celular y probar.
+   - `LEEME.txt`: dice si se firmó con la llave **OFICIAL** o con una de **PRUEBA**.
+4. **Guarda la llave (`stop-dominicano.keystore`) y su contraseña en un lugar seguro, con copia.** Sin ellas no podrás actualizar la app nunca más.
+
+> PWABuilder (pwabuilder.com) también sirve cuando está funcionando, pero genera **otra** llave. Usa siempre la misma llave para la misma app.
 
 ## Paso 3 — Crear la app en Play Console
 1. **Crear app:** nombre "STOP Dominicano", idioma Español (Latinoamérica), tipo **Juego**, **Gratis**.
@@ -51,7 +51,7 @@ El juego ya está preparado: se puede instalar como app (PWA), tiene íconos, fu
 ## Paso 4 — Conectar la app con el sitio (importante)
 Para que la app se vea **sin barra de dirección**, Google comprueba que la app y el sitio son del mismo dueño.
 
-1. En Play Console ve a **Configuración → Integridad de la app → Firma de apps** y copia el **certificado SHA-256 de la clave de firma de apps** (el de Google). Copia también el de tu llave de subida (está en `assetlinks.json` del zip).
+1. En Play Console ve a **Configuración → Integridad de la app → Firma de apps** y copia el **certificado SHA-256 de la clave de firma de apps** (el de Google). Copia también el de tu llave de subida (está en `LEEME.txt`).
 2. En Render → servicio `stop-dominicano` → **Environment**, agrega:
    - `ANDROID_PACKAGE` = `com.soportesrd.stopdominicano`
    - `ANDROID_CERT_SHA256` = las dos huellas separadas por coma, por ejemplo `AB:CD:...:12,98:76:...:EF`

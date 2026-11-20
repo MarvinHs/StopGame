@@ -1,0 +1,61 @@
+name: App Android (Google Play)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_code:
+        description: 'Número de versión para Play (1, 2, 3…). Vacío = el de twa-manifest.json'
+        required: false
+      version_name:
+        description: 'Nombre de versión (ej. 1.0.1). Vacío = el de twa-manifest.json'
+        required: false
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+
+jobs:
+  construir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Generar proyecto Android (Bubblewrap)
+        working-directory: android
+        env:
+          VERSION_CODE: ${{ github.event.inputs.version_code }}
+          VERSION_NAME: ${{ github.event.inputs.version_name }}
+        run: |
+          npm install --no-save --no-audit --no-fund @bubblewrap/core
+          node generar.js
+
+      - name: Compilar .aab y .apk
+        working-directory: android/proyecto
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon bundleRelease assembleRelease
+
+      - name: Firmar
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: bash android/firmar.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stop-dominicano-android
+          path: android/salida/
+          retention-days: 30

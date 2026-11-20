@@ -83,5 +83,6 @@ src/text.js        Comparación de respuestas (tildes, ñ, plurales, parecidas)
 src/words.js       Palabras que usan los bots
 public/            Página del juego (HTML, CSS, JS, service worker, íconos)
 play-store/        Guía, textos, íconos y capturas para Google Play
+android/           Configuración de la app Android (TWA); la genera GitHub Actions
 test/              Pruebas automáticas
 ```

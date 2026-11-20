@@ -1,0 +1,5 @@
+proyecto/
+node_modules/
+salida/
+*.keystore
+*.jks
