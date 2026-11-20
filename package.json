@@ -1,14 +1,18 @@
 {
   "name": "stopgame",
-  "version": "1.0.0",
-  "main": "index.js",
+  "version": "2.0.0",
+  "description": "El clásico juego de STOP dominicano, multijugador en línea con salas y tiempo real.",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "test": "node --test"
   },
-  "keywords": [],
-  "author": "",
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["stop", "basta", "juego", "multijugador", "websocket", "republica-dominicana"],
+  "author": "Marvin Santos",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "ws": "^8.18.3"
   }

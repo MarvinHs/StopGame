@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#002D62">
+  <meta name="description" content="El clásico juego de STOP dominicano, en línea con tus panas y tu familia.">
+  <title>STOP Dominicano 🇩🇴</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div id="connBanner" class="conn-banner" hidden>Reconectando…</div>
+
+  <!-- ═════════════ Inicio ═════════════ -->
+  <main id="screenHome" class="screen home">
+    <header class="brand">
+      <div class="flag-logo" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <h1>STOP <small>Dominicano</small></h1>
+      <p class="tagline">El de toda la vida: letra, lápiz… ¡y el primero que termine dice STOP!</p>
+    </header>
+
+    <section class="card">
+      <label for="nameInput">Tu nombre</label>
+      <input id="nameInput" type="text" maxlength="20" placeholder="Ej: Marvin" autocomplete="nickname">
+
+      <div class="home-actions">
+        <div class="home-block">
+          <h2>Crear una sala</h2>
+          <p class="muted">Tú serás el host y escoges las reglas.</p>
+          <button id="btnCreate" class="btn btn-blue btn-lg">Crear sala</button>
+        </div>
+        <div class="home-or">o</div>
+        <div class="home-block">
+          <h2>Unirme a una sala</h2>
+          <input id="codeInput" type="text" maxlength="4" placeholder="CÓDIGO" class="code-input" autocomplete="off" autocapitalize="characters">
+          <button id="btnJoin" class="btn btn-red btn-lg">Entrar</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card solo">
+      <div>
+        <h2>🤖 Jugar solo contra bots</h2>
+        <p class="muted">Practica cuando no hay nadie: juegas contra 3 bots dominicanos.</p>
+      </div>
+      <div class="solo-controls">
+        <select id="soloLevel" aria-label="Dificultad de los bots">
+          <option value="facil">Fácil</option>
+          <option value="normal" selected>Normal</option>
+          <option value="dificil">Difícil</option>
+        </select>
+        <button id="btnSolo" class="btn btn-blue">Jugar solo</button>
+      </div>
+    </section>
+
+    <details class="card rules">
+      <summary>¿Cómo se juega?</summary>
+      <ol>
+        <li>Al empezar cada ronda sale una <strong>letra</strong>.</li>
+        <li>Todos llenan las categorías (Nombre, Apellido, Ciudad o País, Animal…) con palabras que empiecen con esa letra.</li>
+        <li>El primero que llene <strong>todas</strong> las casillas puede gritar <strong>¡STOP!</strong> y todo el mundo suelta el lápiz. Si nadie lo dice, la ronda termina cuando se acaba el tiempo.</li>
+        <li>Se revisan las respuestas juntos: si la mayoría vota que una <strong>no vale</strong>, vale 0. Cuando todos marcan <strong>Listo</strong> (o pasan 2 minutos) sigue la próxima ronda.</li>
+        <li><strong>100 puntos</strong> si nadie más puso lo mismo, <strong>50</strong> si se repite y <strong>0</strong> si está vacía o no empieza con la letra. Las tildes no cuentan y las respuestas casi iguales (“Gato” y “Gatos”, “Guayaba” y “Guayava”) cuentan como repetidas.</li>
+        <li>Gana quien tenga más puntos al final de las rondas.</li>
+      </ol>
+    </details>
+    <p class="center small muted footer-links"><a href="/privacidad">Política de privacidad</a> · Hecho en RD por SoportesRD 🇩🇴</p>
+  </main>
+
+  <!-- ═════════════ Sala ═════════════ -->
+  <div id="screenRoom" class="screen room" hidden>
+    <header class="topbar">
+      <div class="room-code">
+        <span class="muted">Sala</span>
+        <strong id="roomCode">----</strong>
+        <button id="btnCopy" class="btn btn-ghost btn-sm" title="Copiar enlace para invitar">🔗 Invitar</button>
+      </div>
+      <div id="roundInfo" class="round-info"></div>
+      <div class="topbar-actions">
+        <button id="btnSound" class="btn btn-ghost btn-sm" title="Sonido">🔊</button>
+        <button id="btnLeave" class="btn btn-ghost btn-sm">Salir</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <main class="stage">
+        <!-- Lobby -->
+        <section id="phaseLobby" class="phase" hidden>
+          <div class="card">
+            <h2>Reglas de la partida</h2>
+            <p id="lobbyHint" class="muted"></p>
+            <div class="settings-grid">
+              <label>Tiempo por ronda
+                <select id="setTime">
+                  <option value="30">30 segundos</option>
+                  <option value="45">45 segundos</option>
+                  <option value="60">1 minuto</option>
+                  <option value="90">1 min 30 s</option>
+                  <option value="120">2 minutos</option>
+                  <option value="180">3 minutos</option>
+                  <option value="300">5 minutos</option>
+                </select>
+              </label>
+              <label>Rondas
+                <select id="setRounds"></select>
+              </label>
+            </div>
+
+            <h3>Categorías</h3>
+            <div id="catList" class="chips"></div>
+            <div id="catEditor" class="cat-editor">
+              <input id="catInput" type="text" maxlength="24" placeholder="Agregar categoría (ej: Artista, Marca, Carro…)">
+              <button id="btnAddCat" class="btn btn-blue">Agregar</button>
+            </div>
+            <div id="catSuggestions" class="chips suggestions"></div>
+
+            <h3>Letras que pueden salir</h3>
+            <div id="letterGrid" class="letter-grid"></div>
+
+            <div id="hostTools" class="host-tools">
+              <div class="tool">
+                <h3>🤖 Bots</h3>
+                <div class="row">
+                  <select id="botLevel" aria-label="Dificultad del bot">
+                    <option value="facil">Fácil</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="dificil">Difícil</option>
+                  </select>
+                  <button id="btnAddBot" class="btn btn-blue">Agregar bot</button>
+                </div>
+              </div>
+              <div class="tool">
+                <h3>🔒 Privacidad</h3>
+                <button id="btnLock" class="btn btn-ghost">Cerrar sala</button>
+                <p class="muted small">Con la sala cerrada nadie más puede entrar, aunque tenga el código.</p>
+              </div>
+            </div>
+          </div>
+          <div class="start-row">
+            <button id="btnStart" class="btn btn-red btn-xl">¡Empezar partida!</button>
+            <p id="waitHost" class="muted center">Esperando que el host empiece…</p>
+          </div>
+        </section>
+
+        <!-- Cuenta regresiva -->
+        <section id="phaseCountdown" class="phase countdown" hidden>
+          <p class="muted">Ronda <span id="cdRound"></span> — prepárate…</p>
+          <div id="cdNumber" class="cd-number">3</div>
+        </section>
+
+        <!-- Jugando -->
+        <section id="phasePlaying" class="phase" hidden>
+          <div class="play-head">
+            <div class="big-letter" id="playLetter">A</div>
+            <div class="timer">
+              <div class="timer-text"><span id="timerText">0</span>s</div>
+              <div class="timer-bar"><div id="timerFill"></div></div>
+            </div>
+          </div>
+          <form id="answersForm" class="answers" autocomplete="off"></form>
+          <button id="btnStop" class="btn btn-stop" type="button">¡STOP!</button>
+          <p class="muted center small">Para decir STOP tienes que llenar todas las casillas con la letra.</p>
+        </section>
+
+        <!-- Recogiendo -->
+        <section id="phaseCollecting" class="phase collecting" hidden>
+          <div class="stop-sign">STOP</div>
+          <p id="collectText" class="center"></p>
+          <p class="muted center">Recogiendo las respuestas…</p>
+        </section>
+
+        <!-- Revisión -->
+        <section id="phaseReview" class="phase" hidden>
+          <div class="card review-head">
+            <h2>Revisión — letra <span id="reviewLetter" class="pill-letter"></span></h2>
+            <p class="muted">Toca <strong>👎 No vale</strong> en las respuestas que no deberían contar. Si la mayoría vota en contra, vale 0.</p>
+          </div>
+          <div id="reviewCats" class="review-cats"></div>
+          <div class="card">
+            <h3>Puntos de esta ronda</h3>
+            <div id="reviewTotals" class="totals"></div>
+          </div>
+          <div class="start-row">
+            <button id="btnReady" class="btn btn-red btn-xl">✅ Listo</button>
+            <p id="readyInfo" class="muted center"></p>
+            <button id="btnConfirm" class="btn btn-ghost">Seguir ya (host)</button>
+          </div>
+        </section>
+
+        <!-- Final -->
+        <section id="phaseFinal" class="phase" hidden>
+          <div class="card center">
+            <h2>🏆 ¡Se acabó la partida!</h2>
+            <div id="podium" class="podium"></div>
+          </div>
+          <div class="card table-wrap">
+            <table id="finalTable" class="final-table"></table>
+          </div>
+          <div class="start-row">
+            <button id="btnAgain" class="btn btn-red btn-xl">Jugar otra vez</button>
+            <button id="btnToLobby" class="btn btn-ghost">Cambiar reglas</button>
+            <p id="waitAgain" class="muted center">Esperando que el host empiece otra partida…</p>
+          </div>
+        </section>
+      </main>
+
+      <aside class="side">
+        <section class="card">
+          <h3>Jugadores <span id="playerCount" class="muted"></span></h3>
+          <ul id="playerList" class="players"></ul>
+        </section>
+        <section class="card voice-card">
+          <h3>🎙️ Chat de voz <span id="voiceCount" class="muted"></span></h3>
+          <p id="voiceHint" class="muted small">Habla con los demás mientras juegan. Usa audífonos para que no haya eco.</p>
+          <div class="voice-actions">
+            <button id="btnVoice" class="btn btn-blue btn-sm">Entrar a la voz</button>
+            <button id="btnMute" class="btn btn-ghost btn-sm" hidden>🎤 Silenciarme</button>
+          </div>
+        </section>
+        <section class="card chat">
+          <h3>Chat</h3>
+          <ul id="chatList" class="chat-list"></ul>
+          <form id="chatForm" class="chat-form">
+            <input id="chatInput" type="text" maxlength="200" placeholder="Escribe algo…" autocomplete="off">
+            <button class="btn btn-blue btn-sm">Enviar</button>
+          </form>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <noscript>Este juego necesita JavaScript activado.</noscript>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "STOP Dominicano",
+  "short_name": "STOP",
+  "description": "El clásico juego de STOP dominicano, en línea con tus panas, tu familia o contra bots.",
+  "lang": "es-DO",
+  "dir": "ltr",
+  "start_url": "/?fuente=app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#eef2f7",
+  "theme_color": "#002d62",
+  "categories": ["games", "entertainment", "education"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
