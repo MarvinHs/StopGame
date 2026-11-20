@@ -208,3 +208,22 @@ test('valida la configuración', () => {
   assert.equal(room.settings.roundTime, 300);
   assert.equal(room.settings.rounds, 1);
 });
+
+test('quien entra a mitad de ronda no vota, y los desconectados no cuentan para la mayoría', async () => {
+  const room = makeRoom({ timing: { ...FAST, reconnectMs: 10000 } });
+  const a = room.addPlayer('Ana');
+  const b = room.addPlayer('Beto');
+  const c = room.addPlayer('Carla');
+  room.updateSettings(a.id, { categories: ['Nombre', 'Animal', 'Cosa'] });
+  await playRound(room, a.id, 'T');
+  room.saveDraft(a.id, ['Tito', 'Toro', 'Taza']);
+  room.endRound(null);
+  await wait(15);
+  const d = room.addPlayer('Dani');
+  assert.throws(() => room.vote(d.id, a.id, 0, true), /mitad de ronda/);
+  // Carla se desconecta: con Beto solo ya es mayoría de los conectados
+  room.setConnected(c.id, false);
+  room.vote(b.id, a.id, 0, true);
+  assert.equal(room.scoreReview().totals[a.id], 200);
+  room.close();
+});

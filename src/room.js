@@ -355,6 +355,7 @@ class Room {
   vote(voterId, targetId, catIndex, reject) {
     if (this.phase !== 'review' || !this.review) throw new GameError('Ahora no se está revisando.');
     if (!this.players.has(voterId)) return;
+    if (!this.review.answers.has(voterId)) throw new GameError('Entraste a mitad de ronda: podrás votar desde la próxima.');
     if (voterId === targetId) throw new GameError('No puedes votar tu propia respuesta.');
     const answers = this.review.answers.get(targetId);
     const i = Number(catIndex);
@@ -382,8 +383,10 @@ class Room {
         const text = answers.get(id)[c] || '';
         const norm = normalizeAnswer(text);
         const autoValid = startsWithLetter(norm, this.letter);
-        const voters = [...(votes.get(`${id}:${c}`) || [])].filter((v) => this.players.has(v));
-        const eligible = ids.length - 1; // todos menos el dueño de la respuesta
+        // Solo cuentan los votos de quienes jugaron la ronda y siguen en la sala.
+        const voters = [...(votes.get(`${id}:${c}`) || [])].filter((v) => ids.includes(v));
+        // Votantes posibles: los que jugaron, están conectados y no son el dueño de la respuesta.
+        const eligible = ids.filter((v) => v !== id && this.players.get(v).connected).length;
         const rejected = autoValid && eligible > 0 && voters.length * 2 > eligible;
         return { id, text, norm, autoValid, valid: autoValid && !rejected, voters, rejected };
       });
