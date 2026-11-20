@@ -247,6 +247,33 @@ label { display: block; font-weight: 600; margin-bottom: 0.35rem; }
 .final-table th:first-child, .final-table td:first-child { text-align: left; }
 .final-table tfoot td, .final-table td.tot { font-weight: 900; color: var(--azul); }
 
+/* Solo, herramientas del host, listo, voz */
+.solo { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.solo h2 { margin-bottom: 0.2rem; }
+.solo p { margin: 0; }
+.solo-controls { display: flex; gap: 0.5rem; }
+.solo-controls select { width: auto; }
+.host-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.4rem; }
+.host-tools .row { display: flex; gap: 0.5rem; }
+.host-tools select { width: auto; flex: 1; }
+.host-tools p { margin: 0.4rem 0 0; }
+.btn-ghost.on, .btn-ghost.on:hover:not(:disabled) { background: var(--rojo); border-color: var(--rojo); color: #fff; }
+.badge.bot { background: #7a5af8; }
+.badge.ready { background: var(--verde); }
+.badge.lock { background: var(--rojo); }
+.vicon { font-size: 0.9rem; }
+.players li.speaking .pname { color: var(--verde); font-weight: 800; }
+.players li.speaking .vicon { animation: pulse 0.6s infinite; }
+.voice-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.voice-card p { margin: 0 0 0.6rem; }
+#readyInfo { margin: 0; }
+
+/* Páginas legales y enlaces */
+.legal h2 { margin-top: 1.2rem; color: var(--azul); }
+.legal li { margin: 0.35rem 0; }
+.footer-links a, .legal a { color: var(--azul-2); }
+a.btn { display: inline-block; text-decoration: none; text-align: center; }
+
 /* Chat */
 .chat-list { list-style: none; margin: 0 0 0.6rem; padding: 0; max-height: 260px; overflow-y: auto; font-size: 0.9rem; }
 .chat-list li { padding: 0.25rem 0; overflow-wrap: anywhere; }
@@ -275,7 +302,7 @@ label { display: block; font-weight: 600; margin-bottom: 0.35rem; }
   .home-actions { grid-template-columns: 1fr; }
   .home-or { text-align: center; }
   .brand h1 { font-size: 2.4rem; }
-  .settings-grid { grid-template-columns: 1fr; }
+  .settings-grid, .host-tools { grid-template-columns: 1fr; }
   .big-letter { width: 90px; height: 90px; font-size: 3.6rem; }
   .timer-text { font-size: 1.8rem; }
   .answers { grid-template-columns: 1fr; }

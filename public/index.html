@@ -7,6 +7,7 @@
   <meta name="description" content="El clásico juego de STOP dominicano, en línea con tus panas y tu familia.">
   <title>STOP Dominicano 🇩🇴</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
@@ -41,17 +42,33 @@
       </div>
     </section>
 
+    <section class="card solo">
+      <div>
+        <h2>🤖 Jugar solo contra bots</h2>
+        <p class="muted">Practica cuando no hay nadie: juegas contra 3 bots dominicanos.</p>
+      </div>
+      <div class="solo-controls">
+        <select id="soloLevel" aria-label="Dificultad de los bots">
+          <option value="facil">Fácil</option>
+          <option value="normal" selected>Normal</option>
+          <option value="dificil">Difícil</option>
+        </select>
+        <button id="btnSolo" class="btn btn-blue">Jugar solo</button>
+      </div>
+    </section>
+
     <details class="card rules">
       <summary>¿Cómo se juega?</summary>
       <ol>
         <li>Al empezar cada ronda sale una <strong>letra</strong>.</li>
         <li>Todos llenan las categorías (Nombre, Apellido, Ciudad o País, Animal…) con palabras que empiecen con esa letra.</li>
         <li>El primero que llene <strong>todas</strong> las casillas puede gritar <strong>¡STOP!</strong> y todo el mundo suelta el lápiz. Si nadie lo dice, la ronda termina cuando se acaba el tiempo.</li>
-        <li>Se revisan las respuestas juntos: si la mayoría vota que una <strong>no vale</strong>, vale 0.</li>
-        <li><strong>100 puntos</strong> si nadie más puso lo mismo, <strong>50</strong> si se repite y <strong>0</strong> si está vacía o no empieza con la letra. Las tildes no cuentan: “México” y “Mexico” son la misma.</li>
+        <li>Se revisan las respuestas juntos: si la mayoría vota que una <strong>no vale</strong>, vale 0. Cuando todos marcan <strong>Listo</strong> (o pasan 2 minutos) sigue la próxima ronda.</li>
+        <li><strong>100 puntos</strong> si nadie más puso lo mismo, <strong>50</strong> si se repite y <strong>0</strong> si está vacía o no empieza con la letra. Las tildes no cuentan y las respuestas casi iguales (“Gato” y “Gatos”, “Guayaba” y “Guayava”) cuentan como repetidas.</li>
         <li>Gana quien tenga más puntos al final de las rondas.</li>
       </ol>
     </details>
+    <p class="center small muted footer-links"><a href="/privacidad">Política de privacidad</a> · Hecho en RD por SoportesRD 🇩🇴</p>
   </main>
 
   <!-- ═════════════ Sala ═════════════ -->
@@ -103,6 +120,25 @@
 
             <h3>Letras que pueden salir</h3>
             <div id="letterGrid" class="letter-grid"></div>
+
+            <div id="hostTools" class="host-tools">
+              <div class="tool">
+                <h3>🤖 Bots</h3>
+                <div class="row">
+                  <select id="botLevel" aria-label="Dificultad del bot">
+                    <option value="facil">Fácil</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="dificil">Difícil</option>
+                  </select>
+                  <button id="btnAddBot" class="btn btn-blue">Agregar bot</button>
+                </div>
+              </div>
+              <div class="tool">
+                <h3>🔒 Privacidad</h3>
+                <button id="btnLock" class="btn btn-ghost">Cerrar sala</button>
+                <p class="muted small">Con la sala cerrada nadie más puede entrar, aunque tenga el código.</p>
+              </div>
+            </div>
           </div>
           <div class="start-row">
             <button id="btnStart" class="btn btn-red btn-xl">¡Empezar partida!</button>
@@ -149,8 +185,9 @@
             <div id="reviewTotals" class="totals"></div>
           </div>
           <div class="start-row">
-            <button id="btnConfirm" class="btn btn-red btn-xl">Confirmar puntos</button>
-            <p id="waitConfirm" class="muted center">El host confirma los puntos cuando todos terminen de revisar.</p>
+            <button id="btnReady" class="btn btn-red btn-xl">✅ Listo</button>
+            <p id="readyInfo" class="muted center"></p>
+            <button id="btnConfirm" class="btn btn-ghost">Seguir ya (host)</button>
           </div>
         </section>
 
@@ -175,6 +212,14 @@
         <section class="card">
           <h3>Jugadores <span id="playerCount" class="muted"></span></h3>
           <ul id="playerList" class="players"></ul>
+        </section>
+        <section class="card voice-card">
+          <h3>🎙️ Chat de voz <span id="voiceCount" class="muted"></span></h3>
+          <p id="voiceHint" class="muted small">Habla con los demás mientras juegan. Usa audífonos para que no haya eco.</p>
+          <div class="voice-actions">
+            <button id="btnVoice" class="btn btn-blue btn-sm">Entrar a la voz</button>
+            <button id="btnMute" class="btn btn-ghost btn-sm" hidden>🎤 Silenciarme</button>
+          </div>
         </section>
         <section class="card chat">
           <h3>Chat</h3>

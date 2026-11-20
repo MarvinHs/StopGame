@@ -157,6 +157,7 @@
   }
 
   function goHome(message, kind) {
+    voiceLeave(true);
     saveSession(null);
     pending = null;
     state = null;
@@ -173,11 +174,15 @@
       case 'joined':
         pending = null;
         saveSession({ code: msg.code, playerId: msg.playerId, token: msg.token });
+        if (voice.joined) voiceRejoin();
         history.replaceState(null, '', `?sala=${msg.code}`);
         break;
       case 'state':
         clockOffset = msg.state.serverNow - Date.now();
         render(msg.state);
+        break;
+      case 'rtc':
+        handleSignal(msg.from, msg.signal);
         break;
       case 'event':
         if (msg.event.kind === 'stop') sounds.stop();
@@ -222,6 +227,11 @@
   $('btnCreate').addEventListener('click', () => {
     const name = readName();
     if (name) enterRoom({ type: 'create', name });
+  });
+
+  $('btnSolo').addEventListener('click', () => {
+    const name = readName();
+    if (name) enterRoom({ type: 'create', name, solo: true, bots: 3, level: $('soloLevel').value });
   });
 
   function join() {
@@ -301,7 +311,8 @@
     $('screenRoom').hidden = false;
     $('roomCode').textContent = state.code;
     document.title = `STOP · Sala ${state.code}`;
-    $('roundInfo').textContent = state.phase === 'lobby' ? 'En la sala' : state.phase === 'final' ? 'Partida terminada' : `Ronda ${state.round} de ${state.settings.rounds}`;
+    $('roundInfo').textContent = (state.phase === 'lobby' ? 'En la sala' : state.phase === 'final' ? 'Partida terminada' : `Ronda ${state.round} de ${state.settings.rounds}`)
+      + (state.locked ? ' · 🔒' : '');
 
     for (const [phase, id] of Object.entries(PHASE_SECTIONS)) $(id).hidden = phase !== state.phase;
 
@@ -313,6 +324,7 @@
 
     renderPlayers();
     renderChat();
+    syncVoice();
 
     switch (state.phase) {
       case 'lobby': renderLobby(); break;
@@ -348,10 +360,12 @@
       const me = p.id === state.you;
       const controls = [];
       if (isHost() && !me) {
-        controls.push(h('button', {
-          class: 'mini-btn', title: 'Hacer host', text: '👑',
-          onclick: () => send({ type: 'makeHost', playerId: p.id }),
-        }));
+        if (!p.isBot) {
+          controls.push(h('button', {
+            class: 'mini-btn', title: 'Hacer host', text: '👑',
+            onclick: () => send({ type: 'makeHost', playerId: p.id }),
+          }));
+        }
         controls.push(h('button', {
           class: 'mini-btn',
           title: 'Sacar de la sala',
@@ -369,11 +383,15 @@
         }));
       }
 
-      list.append(h('li', { class: p.connected ? '' : 'off' },
+      const classes = [p.connected ? '' : 'off', voice.speaking.has(p.id) ? 'speaking' : ''].join(' ').trim();
+      list.append(h('li', { class: classes, 'data-id': p.id },
         h('span', { class: `dot ${p.connected ? '' : 'off'}`, title: p.connected ? 'Conectado' : 'Desconectado' }),
         h('span', { class: 'pname', text: p.name }),
+        p.voice ? h('span', { class: 'vicon', title: p.voice.muted ? 'En la voz (silenciado)' : 'En la voz', text: p.voice.muted ? '🔇' : '🎙️' }) : null,
+        p.isBot ? h('span', { class: 'badge bot', text: p.level.toUpperCase() }) : null,
         p.id === state.hostId ? h('span', { class: 'badge', text: 'HOST' }) : null,
         me ? h('span', { class: 'badge you', text: 'TÚ' }) : null,
+        state.phase === 'review' && p.ready ? h('span', { class: 'badge ready', title: 'Listo', text: '✓' }) : null,
         p.filled !== null ? h('span', { class: `progress ${p.filled === total ? 'full' : ''}`, text: `${p.filled}/${total}` }) : null,
         h('span', { class: 'pscore', text: p.score }),
         controls,
@@ -480,12 +498,20 @@
       });
     }));
 
+    $('hostTools').hidden = !host;
+    $('btnLock').textContent = state.locked ? '🔓 Abrir sala' : '🔒 Cerrar sala';
+    $('btnLock').classList.toggle('on', state.locked);
+    $('btnAddBot').disabled = state.players.filter((p) => p.isBot).length >= state.limits.maxBots;
+
     $('btnStart').hidden = !host;
     $('waitHost').hidden = host;
   }
 
+  $('btnAddBot').addEventListener('click', () => send({ type: 'addBot', level: $('botLevel').value }));
+  $('btnLock').addEventListener('click', () => send({ type: 'lock', locked: !state.locked }));
+
   $('btnStart').addEventListener('click', () => {
-    if (state.players.length < 2) toast('Estás solo en la sala. Invita a alguien con el botón 🔗 (igual puedes practicar).');
+    if (state.players.length < 2) toast('Estás solo en la sala. Agrega bots o invita a alguien con el botón 🔗.');
     send({ type: 'start' });
   });
 
@@ -590,7 +616,7 @@
         let voteEl = null;
         if (mine) {
           if (cell.rejectVotes) voteEl = h('span', { class: 'vote-count', text: `👎 ${cell.rejectVotes}` });
-        } else if (cell.votable) {
+        } else if (cell.votable && state.review.inRound) {
           voteEl = h('button', {
             class: `vote ${cell.youRejected ? 'on' : ''}`,
             title: cell.youRejected ? 'Quitar mi voto' : 'Votar que esta respuesta no vale',
@@ -612,12 +638,31 @@
     fill($('reviewTotals'), ...sorted.map((row) => h('span', { class: 'total-chip' },
       playerName(row.playerId), h('strong', { text: `+${row.total}` }))));
 
-    const host = isHost();
-    $('btnConfirm').hidden = !host;
-    $('btnConfirm').textContent = state.round >= state.settings.rounds ? 'Confirmar y ver ganador 🏆' : 'Confirmar puntos y seguir ▶';
-    $('waitConfirm').hidden = host;
+    const me = state.players.find((p) => p.id === state.you);
+    const inRound = state.review.inRound;
+    const last = state.round >= state.settings.rounds;
+    $('btnReady').hidden = !inRound;
+    $('btnReady').textContent = me && me.ready ? '⏳ Espera, no estoy listo' : last ? '✅ Listo, ver ganador' : '✅ Listo';
+    $('btnReady').classList.toggle('btn-ghost', Boolean(me && me.ready));
+    $('btnReady').classList.toggle('btn-red', !(me && me.ready));
+    $('btnConfirm').hidden = !isHost();
+    $('btnConfirm').textContent = last ? 'Ver ganador ya (host) 🏆' : 'Seguir ya (host) ▶';
+    updateReadyInfo();
   }
 
+  function updateReadyInfo() {
+    if (!state || state.phase !== 'review') return;
+    const humans = state.players.filter((p) => !p.isBot && p.connected && state.review.rows.some((r) => r.playerId === p.id));
+    const ready = humans.filter((p) => p.ready).length;
+    const secs = state.endsAt ? Math.max(0, Math.ceil((state.endsAt - (Date.now() + clockOffset)) / 1000)) : null;
+    const prefix = state.review.inRound ? '' : 'Entraste a mitad de ronda: juegas desde la próxima. ';
+    $('readyInfo').textContent = `${prefix}${ready} de ${humans.length} listos${secs !== null ? ` · sigue solo en ${secs} s` : ''}`;
+  }
+
+  $('btnReady').addEventListener('click', () => {
+    const me = state.players.find((p) => p.id === state.you);
+    send({ type: 'ready', ready: !(me && me.ready) });
+  });
   $('btnConfirm').addEventListener('click', () => send({ type: 'confirm' }));
 
   // ───────────────────────── Final ─────────────────────────
@@ -652,6 +697,217 @@
   $('btnAgain').addEventListener('click', () => send({ type: 'start' }));
   $('btnToLobby').addEventListener('click', () => send({ type: 'lobby' }));
 
+  // ───────────────────────── Chat de voz (WebRTC) ─────────────────────────
+  // Cada persona se conecta directo con las demás (malla). El servidor solo pasa
+  // los mensajes para que se encuentren; el audio no pasa por el servidor.
+  const voice = {
+    joined: false, muted: false, stream: null, ice: null, ctx: null,
+    peers: new Map(), meters: new Map(), speaking: new Set(), lastJoinSent: 0,
+  };
+
+  async function loadIce() {
+    if (voice.ice) return voice.ice;
+    try {
+      const r = await fetch('/ice', { cache: 'no-store' });
+      voice.ice = (await r.json()).iceServers;
+    } catch {
+      voice.ice = [{ urls: 'stun:stun.l.google.com:19302' }];
+    }
+    return voice.ice;
+  }
+
+  async function voiceJoin() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.RTCPeerConnection) {
+      toast('Tu navegador no permite el chat de voz.', 'error');
+      return;
+    }
+    $('btnVoice').disabled = true;
+    try {
+      voice.stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false,
+      });
+    } catch (err) {
+      $('btnVoice').disabled = false;
+      toast(err && err.name === 'NotAllowedError'
+        ? 'Necesito permiso para usar el micrófono. Revísalo en la configuración del navegador.'
+        : 'No se pudo abrir el micrófono.', 'error');
+      return;
+    }
+    await loadIce();
+    $('btnVoice').disabled = false;
+    voice.joined = true;
+    voice.muted = false;
+    watchLevel(state.you, voice.stream, true);
+    voice.lastJoinSent = Date.now();
+    send({ type: 'voiceJoin' });
+    updateVoiceUI();
+  }
+
+  function voiceLeave(silent) {
+    if (!voice.joined) return;
+    for (const id of [...voice.peers.keys()]) closePeer(id);
+    if (voice.stream) voice.stream.getTracks().forEach((t) => t.stop());
+    voice.stream = null;
+    for (const id of [...voice.meters.keys()]) unwatchLevel(id);
+    voice.joined = false;
+    if (!silent) send({ type: 'voiceLeave' });
+    updateVoiceUI();
+  }
+
+  /** Después de reconectar, el servidor nos sacó de la voz: volvemos a entrar. */
+  function voiceRejoin() {
+    for (const id of [...voice.peers.keys()]) closePeer(id);
+    voice.lastJoinSent = Date.now();
+    send({ type: 'voiceJoin' });
+    if (voice.muted) send({ type: 'voiceMute', muted: true });
+  }
+
+  function syncVoice() {
+    updateVoiceUI();
+    if (!voice.joined) return;
+    const me = state.players.find((p) => p.id === state.you);
+    if (me && !me.voice && Date.now() - voice.lastJoinSent > 3000) voiceRejoin();
+    const others = state.players.filter((p) => p.voice && p.id !== state.you).map((p) => p.id);
+    for (const id of others) if (!voice.peers.has(id)) createPeer(id);
+    for (const id of [...voice.peers.keys()]) if (!others.includes(id)) closePeer(id);
+  }
+
+  function createPeer(id) {
+    const initiator = state.you < id; // solo uno de los dos manda la oferta
+    const pc = new RTCPeerConnection({ iceServers: voice.ice || [] });
+    const peer = { pc, audio: null, pending: [], initiator };
+    voice.peers.set(id, peer);
+    voice.stream.getTracks().forEach((t) => pc.addTrack(t, voice.stream));
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) send({ type: 'rtc', to: id, signal: { candidate: e.candidate } });
+    };
+    pc.ontrack = (e) => {
+      const stream = e.streams[0] || new MediaStream([e.track]);
+      if (!peer.audio) {
+        peer.audio = document.createElement('audio');
+        peer.audio.autoplay = true;
+        peer.audio.setAttribute('playsinline', '');
+        document.body.append(peer.audio);
+      }
+      peer.audio.srcObject = stream;
+      peer.audio.play().catch(() => {});
+      watchLevel(id, stream, false);
+    };
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed' && initiator && pc.restartIce) pc.restartIce();
+    };
+    if (initiator) {
+      pc.onnegotiationneeded = async () => {
+        try {
+          await pc.setLocalDescription();
+          send({ type: 'rtc', to: id, signal: { description: pc.localDescription } });
+        } catch { /* se reintenta en la próxima negociación */ }
+      };
+    }
+    return peer;
+  }
+
+  async function handleSignal(from, signal) {
+    if (!voice.joined || !signal || !state) return;
+    const peer = voice.peers.get(from) || createPeer(from);
+    const { pc } = peer;
+    try {
+      if (signal.description) {
+        if (signal.description.type === 'offer' && peer.initiator) return; // no debería pasar
+        await pc.setRemoteDescription(signal.description);
+        if (signal.description.type === 'offer') {
+          await pc.setLocalDescription();
+          send({ type: 'rtc', to: from, signal: { description: pc.localDescription } });
+        }
+        for (const c of peer.pending.splice(0)) await pc.addIceCandidate(c).catch(() => {});
+      } else if (signal.candidate) {
+        if (pc.remoteDescription) await pc.addIceCandidate(signal.candidate).catch(() => {});
+        else peer.pending.push(signal.candidate);
+      }
+    } catch (err) {
+      console.warn('Voz: error de señalización', err);
+    }
+  }
+
+  function closePeer(id) {
+    const peer = voice.peers.get(id);
+    if (!peer) return;
+    voice.peers.delete(id);
+    try { peer.pc.close(); } catch { /* ya cerrada */ }
+    if (peer.audio) {
+      peer.audio.srcObject = null;
+      peer.audio.remove();
+    }
+    unwatchLevel(id);
+  }
+
+  // Medidor de volumen para saber quién está hablando.
+  function watchLevel(id, stream, isMe) {
+    try {
+      voice.ctx = voice.ctx || new (window.AudioContext || window.webkitAudioContext)();
+      if (voice.ctx.state === 'suspended') voice.ctx.resume();
+      unwatchLevel(id);
+      const source = voice.ctx.createMediaStreamSource(stream);
+      const analyser = voice.ctx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      voice.meters.set(id, { source, analyser, data: new Uint8Array(analyser.fftSize), isMe });
+    } catch { /* sin medidor */ }
+  }
+
+  function unwatchLevel(id) {
+    const m = voice.meters.get(id);
+    if (m) {
+      try { m.source.disconnect(); } catch { /* ok */ }
+      voice.meters.delete(id);
+    }
+    if (voice.speaking.delete(id)) markSpeaking(id, false);
+  }
+
+  function markSpeaking(id, on) {
+    const li = document.querySelector(`#playerList li[data-id="${CSS.escape(id)}"]`);
+    if (li) li.classList.toggle('speaking', on);
+  }
+
+  setInterval(() => {
+    for (const [id, m] of voice.meters) {
+      m.analyser.getByteTimeDomainData(m.data);
+      let sum = 0;
+      for (const v of m.data) sum += ((v - 128) / 128) ** 2;
+      const level = Math.sqrt(sum / m.data.length);
+      const on = level > 0.03 && !(m.isMe && voice.muted);
+      if (on !== voice.speaking.has(id)) {
+        if (on) voice.speaking.add(id);
+        else voice.speaking.delete(id);
+        markSpeaking(id, on);
+      }
+    }
+  }, 150);
+
+  function updateVoiceUI() {
+    const inVoice = state ? state.players.filter((p) => p.voice).length : 0;
+    $('voiceCount').textContent = state ? `(${inVoice}/${state.limits.maxVoice})` : '';
+    $('btnVoice').textContent = voice.joined ? 'Salir de la voz' : 'Entrar a la voz';
+    $('btnVoice').classList.toggle('btn-blue', !voice.joined);
+    $('btnVoice').classList.toggle('btn-ghost', voice.joined);
+    $('btnMute').hidden = !voice.joined;
+    $('btnMute').textContent = voice.muted ? '🔇 Activar micrófono' : '🎤 Silenciarme';
+    $('btnMute').classList.toggle('on', voice.muted);
+    $('voiceHint').textContent = voice.joined
+      ? (inVoice > 1 ? `Estás hablando con ${inVoice - 1} ${inVoice - 1 === 1 ? 'persona' : 'personas'}.` : 'Estás en la voz. Esperando que alguien más entre…')
+      : 'Habla con los demás mientras juegan. Usa audífonos para que no haya eco.';
+  }
+
+  $('btnVoice').addEventListener('click', () => (voice.joined ? voiceLeave(false) : voiceJoin()));
+  $('btnMute').addEventListener('click', () => {
+    voice.muted = !voice.muted;
+    if (voice.stream) voice.stream.getAudioTracks().forEach((t) => { t.enabled = !voice.muted; });
+    send({ type: 'voiceMute', muted: voice.muted });
+    updateVoiceUI();
+  });
+
   // ───────────────────────── Reloj ─────────────────────────
   let lastSecond = null;
 
@@ -660,7 +916,9 @@
     const remaining = Math.max(0, state.endsAt - (Date.now() + clockOffset));
     const seconds = Math.ceil(remaining / 1000);
 
-    if (state.phase === 'countdown') {
+    if (state.phase === 'review') {
+      updateReadyInfo();
+    } else if (state.phase === 'countdown') {
       const n = Math.max(1, seconds);
       $('cdNumber').textContent = n;
       if (n !== lastSecond) sounds.tick();
@@ -684,6 +942,9 @@
   });
 
   // ───────────────────────── Arranque ─────────────────────────
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  }
   updateSoundButton();
   $('nameInput').value = storage.get('localStorage', 'stop.name') || '';
   const params = new URLSearchParams(location.search);

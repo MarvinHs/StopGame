@@ -72,6 +72,11 @@ test('servidor completo: página, sala, ronda con STOP, votos y final', async (t
   assert.match(page.body, /STOP/);
   assert.equal((await get(port, '/..%2fserver.js')).status, 403);
   assert.equal((await get(port, '/healthz')).status, 200);
+  assert.equal((await get(port, '/privacidad')).status, 200);
+  assert.equal((await get(port, '/sw.js')).status, 200);
+  assert.equal((await get(port, '/icons/icon-512.png')).status, 200);
+  assert.deepEqual(JSON.parse((await get(port, '/.well-known/assetlinks.json')).body), []);
+  assert.ok(JSON.parse((await get(port, '/ice')).body).iceServers.length >= 1);
 
   const ana = new Bot(port);
   const beto = new Bot(port);
@@ -119,20 +124,22 @@ test('servidor completo: página, sala, ronda con STOP, votos y final', async (t
   const betoId = beto.joined.playerId;
   const anaRow = rows.find((r) => r.playerId === anaId);
   const betoRow = rows.find((r) => r.playerId === betoId);
-  assert.deepEqual(anaRow.cells.map((c) => c.points), [50, 100, 100]);
-  assert.deepEqual(betoRow.cells.map((c) => c.points), [50, 100, 0]);
+  // Ana puso el animal en plural: cuenta como parecida a la de Beto (50 y 50)
+  assert.deepEqual(anaRow.cells.map((c) => c.points), [50, 50, 100]);
+  assert.match(anaRow.cells[1].reason, /parecida/);
+  assert.deepEqual(betoRow.cells.map((c) => c.points), [50, 50, 0]);
 
   // Beto vota que la "cosa" de Ana no vale (con 2 jugadores, 1 voto basta)
   beto.send({ type: 'vote', playerId: anaId, category: 2, reject: true });
   const voted = await ana.waitFor((m) => m.type === 'state' && m.state.review
-    && m.state.review.rows.find((r) => r.playerId === anaId).total === 150, 'voto aplicado');
+    && m.state.review.rows.find((r) => r.playerId === anaId).total === 100, 'voto aplicado');
   assert.ok(voted);
 
   ana.send({ type: 'confirm' });
   const final = await beto.waitPhase('final');
   const scores = Object.fromEntries(final.state.players.map((p) => [p.name, p.score]));
-  assert.equal(scores.Ana, 150);
-  assert.equal(scores['<b onclick=x>B</b>'], 150);
+  assert.equal(scores.Ana, 100);
+  assert.equal(scores['<b onclick=x>B</b>'], 100);
 
   // Reconexión: Beto se cae y vuelve con su token
   const { playerId, token } = beto.joined;
@@ -158,4 +165,44 @@ test('servidor completo: página, sala, ronda con STOP, votos y final', async (t
   ana.close();
   beto2.close();
   intruso.close();
+});
+
+test('modo solo, límite de códigos equivocados y señalización de voz', async (t) => {
+  const { server, wss, port } = await start(0, { timing: { countdownMs: 50, collectMs: 50, reconnectMs: 200 } });
+  t.after(() => { for (const c of wss.clients) c.terminate(); wss.close(); server.close(); });
+
+  // Solo contra bots: sala cerrada con 3 bots
+  const solo = new Bot(port);
+  await solo.ready;
+  solo.send({ type: 'create', name: 'Marvin', solo: true, bots: 3, level: 'facil' });
+  const st = await solo.waitFor((m) => m.type === 'state' && m.state.players.length === 4, 'sala con bots');
+  assert.equal(st.state.players.filter((p) => p.isBot).length, 3);
+  assert.equal(st.state.locked, true);
+
+  // Adivinar códigos: a los 8 errores se bloquea por un minuto
+  const guesser = new Bot(port);
+  await guesser.ready;
+  for (let i = 0; i < 9; i++) guesser.send({ type: 'join', name: `X${i}`, code: 'ZZZZ' });
+  await guesser.waitFor((m) => m.type === 'error' && /Demasiados/.test(m.message), 'bloqueo');
+
+  // Voz: solo se pasan mensajes entre dos personas que están en la voz
+  const ana = new Bot(port);
+  const beto = new Bot(port);
+  await Promise.all([ana.ready, beto.ready]);
+  ana.send({ type: 'create', name: 'Ana' });
+  const { code, playerId: anaId } = await ana.waitFor((m) => m.type === 'joined');
+  beto.send({ type: 'join', name: 'Beto', code });
+  const { playerId: betoId } = await beto.waitFor((m) => m.type === 'joined');
+
+  ana.send({ type: 'rtc', to: betoId, signal: { hola: 1 } }); // nadie en la voz: no pasa
+  ana.send({ type: 'voiceJoin' });
+  beto.send({ type: 'voiceJoin' });
+  await ana.waitFor((m) => m.type === 'state' && m.state.players.filter((p) => p.voice).length === 2, 'dos en voz');
+  ana.send({ type: 'rtc', to: betoId, signal: { description: { type: 'offer', sdp: 'x' } } });
+  const sig = await beto.waitFor((m) => m.type === 'rtc', 'señal');
+  assert.equal(sig.from, anaId);
+  assert.equal(sig.signal.description.type, 'offer');
+  assert.ok(!beto.messages.some((m) => m.type === 'rtc' && m.signal.hola), 'la primera señal no debió pasar');
+
+  for (const b of [solo, guesser, ana, beto]) b.close();
 });

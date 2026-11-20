@@ -227,3 +227,118 @@ test('quien entra a mitad de ronda no vota, y los desconectados no cuentan para 
   assert.equal(room.scoreReview().totals[a.id], 200);
   room.close();
 });
+
+test('respuestas parecidas (plural, letra doble, error de una letra) cuentan como repetidas', async () => {
+  const room = makeRoom();
+  const a = room.addPlayer('Ana');
+  const b = room.addPlayer('Beto');
+  const c = room.addPlayer('Carla');
+  room.updateSettings(a.id, { categories: ['Animal', 'Fruta', 'Nombre'] });
+  await playRound(room, a.id, 'G');
+  room.saveDraft(a.id, ['Gato', 'Guayaba', 'Gabriel']);
+  room.saveDraft(b.id, ['Gatos', 'Guayava', 'Gabriela']);
+  room.saveDraft(c.id, ['Gallo', 'Granada', 'Gustavo']);
+  room.endRound(null);
+  await wait(15);
+  const { cells } = room.scoreReview();
+  assert.deepEqual(cells.get(a.id).map((x) => x.points), [50, 50, 50]);
+  assert.deepEqual(cells.get(b.id).map((x) => x.points), [50, 50, 50]);
+  assert.deepEqual(cells.get(c.id).map((x) => x.points), [100, 100, 100]);
+  assert.match(cells.get(b.id)[0].reason, /parecida a "Gato"/);
+  room.close();
+});
+
+test('botón Listo: cuando todos están listos la ronda sigue sola', async () => {
+  const room = makeRoom();
+  const a = room.addPlayer('Ana');
+  const b = room.addPlayer('Beto');
+  room.updateSettings(a.id, { rounds: 2 });
+  await playRound(room, a.id, 'R');
+  room.endRound(null);
+  await wait(15);
+  room.setReady(a.id, true);
+  assert.equal(room.phase, 'review');
+  room.setReady(b.id, true);
+  assert.equal(room.phase, 'countdown');
+  assert.equal(room.round, 2);
+  room.close();
+});
+
+test('la revisión avanza sola si nadie confirma (host dormido)', async () => {
+  const room = makeRoom({ timing: { ...FAST, reviewMs: 30 } });
+  const a = room.addPlayer('Ana');
+  room.addPlayer('Beto');
+  room.updateSettings(a.id, { rounds: 1 });
+  await playRound(room, a.id, 'R');
+  room.endRound(null);
+  await wait(15);
+  assert.equal(room.phase, 'review');
+  await wait(50);
+  assert.equal(room.phase, 'final');
+  room.close();
+});
+
+test('sala cerrada: nadie nuevo entra, pero sí bots', () => {
+  const room = makeRoom();
+  const a = room.addPlayer('Ana');
+  room.setLocked(a.id, true);
+  assert.throws(() => room.addPlayer('Beto'), /cerrada/);
+  room.addBot(a.id, 'facil');
+  assert.equal(room.bots().length, 1);
+  room.setLocked(a.id, false);
+  room.addPlayer('Beto');
+  room.close();
+});
+
+test('bots: escriben con la letra, dicen STOP en difícil y nunca son host', async () => {
+  const room = makeRoom({ timing: { ...FAST, botStopDelayMs: 5, botSpeed: 0.005 } });
+  const a = room.addPlayer('Ana');
+  const bot = room.addBot(a.id, 'dificil');
+  assert.ok(bot.isBot);
+  assert.throws(() => room.makeHost(a.id, bot.id), /bot no puede/);
+  room.updateSettings(a.id, { categories: ['Nombre', 'Animal', 'Color'], rounds: 1 });
+  room.settings.roundTime = 0.5; // 500 ms
+  // Forzamos que el bot sepa todo para que la prueba sea estable
+  const original = Math.random;
+  Math.random = () => 0.01;
+  try {
+    await playRound(room, a.id, 'M');
+    for (let i = 0; i < 100 && room.phase === 'playing'; i++) await wait(10);
+  } finally {
+    Math.random = original;
+  }
+  assert.ok(['collecting', 'review'].includes(room.phase), `fase ${room.phase}`);
+  assert.equal(room.stoppedBy, bot.name);
+  await wait(15);
+  const answers = room.review.answers.get(bot.id);
+  assert.ok(answers.every((w) => startsWithLetter(w, 'M')), answers.join(','));
+  // Ana sola revisa: al marcar Listo se termina (el bot ya está listo)
+  room.setReady(a.id, true);
+  assert.equal(room.phase, 'final');
+  room.close();
+});
+
+test('si solo quedan bots la sala se cierra', () => {
+  let emptied = false;
+  const room = makeRoom({ onEmpty: () => { emptied = true; } });
+  const a = room.addPlayer('Ana');
+  room.addBot(a.id, 'normal');
+  room.removePlayer(a.id);
+  assert.ok(emptied);
+});
+
+test('chat de voz: máximo de personas y sin bots', () => {
+  const room = makeRoom();
+  const a = room.addPlayer('Ana');
+  const bot = room.addBot(a.id, 'normal');
+  room.voiceJoin(bot.id);
+  assert.equal(room.voice.size, 0);
+  room.voiceJoin(a.id);
+  room.voiceMute(a.id, true);
+  assert.deepEqual(room.snapshot(a.id).players.find((p) => p.id === a.id).voice, { muted: true });
+  for (let i = 0; i < 7; i++) room.voiceJoin(room.addPlayer(`P${i}`).id);
+  assert.throws(() => room.voiceJoin(room.addPlayer('Extra').id), /lleno/);
+  room.setConnected(a.id, false);
+  assert.ok(!room.inVoice(a.id));
+  room.close();
+});

@@ -17,7 +17,15 @@ const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // sin I ni O para no confundir
 const MAX_ROOMS = 500;
-const MSG_PER_SECOND = 25;
+const MSG_PER_SECOND = 60; // alto porque el chat de voz manda ráfagas al conectar
+// Para que nadie adivine códigos de sala ajenas. El límite por IP es más alto porque
+// en RD muchas personas de la misma compañía de celular comparten IP (CGNAT).
+const JOIN_FAILS_PER_CONN = 8;
+const JOIN_FAILS_PER_IP = 40;
+
+// Android (Play Store): datos para /.well-known/assetlinks.json
+const ANDROID_PACKAGE = process.env.ANDROID_PACKAGE || 'com.soportesrd.stopdominicano';
+const ANDROID_SHA256 = (process.env.ANDROID_CERT_SHA256 || '').split(',').map((s) => s.trim()).filter(Boolean);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -42,9 +50,30 @@ function serveStatic(req, res) {
     res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ ok: true, rooms: rooms.size }));
     return;
   }
+  if (url.pathname === '/ice') {
+    getIceServers().then((iceServers) => {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ iceServers }));
+    });
+    return;
+  }
+  if (url.pathname === '/.well-known/assetlinks.json') {
+    const body = ANDROID_SHA256.length
+      ? [{ relation: ['delegate_permission/common.handle_all_urls'], target: { namespace: 'android_app', package_name: ANDROID_PACKAGE, sha256_cert_fingerprints: ANDROID_SHA256 } }]
+      : [];
+    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(body));
+    return;
+  }
 
-  let pathname = decodeURIComponent(url.pathname);
-  if (pathname === '/' || !path.extname(pathname)) pathname = '/index.html';
+  let pathname;
+  try {
+    pathname = decodeURIComponent(url.pathname);
+  } catch {
+    res.writeHead(400).end();
+    return;
+  }
+  const PAGES = { '/privacidad': '/privacidad.html', '/offline': '/offline.html' };
+  if (PAGES[pathname]) pathname = PAGES[pathname];
+  else if (pathname === '/' || !path.extname(pathname)) pathname = '/index.html';
   const filePath = path.normalize(path.join(PUBLIC_DIR, pathname));
   if (!filePath.startsWith(PUBLIC_DIR + path.sep)) {
     res.writeHead(403).end();
@@ -58,14 +87,60 @@ function serveStatic(req, res) {
     }
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream',
-      'Cache-Control': filePath.endsWith('index.html') ? 'no-cache' : 'public, max-age=300',
+      'Cache-Control': /\.(html|webmanifest)$|sw\.js$/.test(filePath) ? 'no-cache' : 'public, max-age=300',
+      'Permissions-Policy': 'microphone=(self), camera=()',
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'same-origin',
       'Content-Security-Policy':
-        "default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; style-src 'self'",
+        "default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; style-src 'self'; media-src 'self' blob: mediastream:; worker-src 'self'; manifest-src 'self'",
     });
     res.end(req.method === 'HEAD' ? undefined : data);
   });
+}
+
+// ───────────────────────── Chat de voz: servidores ICE ─────────────────────────
+// STUN (gratis) basta en la mayoría de las redes. Para redes de celular con CGNAT
+// hace falta un TURN: configura TURN_URLS/TURN_USERNAME/TURN_CREDENTIAL, o bien
+// CF_TURN_KEY_ID/CF_TURN_API_TOKEN para usar el TURN de Cloudflare.
+
+const STUN = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+let cfCache = { at: 0, servers: null };
+
+async function getIceServers() {
+  const servers = [...STUN];
+  if (process.env.TURN_URLS) {
+    servers.push({
+      urls: process.env.TURN_URLS.split(',').map((u) => u.trim()).filter(Boolean),
+      username: process.env.TURN_USERNAME || '',
+      credential: process.env.TURN_CREDENTIAL || '',
+    });
+  }
+  const keyId = process.env.CF_TURN_KEY_ID;
+  const token = process.env.CF_TURN_API_TOKEN;
+  if (keyId && token) {
+    try {
+      if (!cfCache.servers || Date.now() - cfCache.at > 3600 * 1000) {
+        const r = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${keyId}/credentials/generate-ice-servers`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ttl: 6 * 3600 }),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        // Los navegadores bloquean el puerto 53: lo quitamos para no esperar en vano.
+        const list = [].concat(data.iceServers || []).map((srv) => ({
+          ...srv,
+          urls: [].concat(srv.urls || []).filter((u) => !/:53(\?|$)/.test(u)),
+        }));
+        cfCache = { at: Date.now(), servers: list };
+      }
+      servers.push(...cfCache.servers);
+    } catch (err) {
+      console.error('No se pudieron obtener credenciales TURN de Cloudflare:', err.message);
+    }
+  }
+  return servers;
 }
 
 // ───────────────────────── Salas ─────────────────────────
@@ -136,6 +211,29 @@ function getRoom(code) {
   return room;
 }
 
+const joinFails = new Map(); // ip -> { count, since }
+
+function checkJoinLimit(ws) {
+  const entry = joinFails.get(ws.ip);
+  const ipBlocked = entry && Date.now() - entry.since < 60000 && entry.count >= JOIN_FAILS_PER_IP;
+  if (ws.joinFails >= JOIN_FAILS_PER_CONN || ipBlocked) {
+    throw new GameError('Demasiados códigos equivocados. Espera un minuto e intenta otra vez.');
+  }
+}
+
+function countJoinFail(ws) {
+  ws.joinFails = (ws.joinFails || 0) + 1;
+  if (ws.joinFails === JOIN_FAILS_PER_CONN) setTimeout(() => { ws.joinFails = 0; }, 60000).unref();
+  const ip = ws.ip;
+  const now = Date.now();
+  const entry = joinFails.get(ip);
+  if (!entry || now - entry.since >= 60000) joinFails.set(ip, { count: 1, since: now });
+  else entry.count += 1;
+  if (joinFails.size > 5000) {
+    for (const [key, e] of joinFails) if (now - e.since >= 60000) joinFails.delete(key);
+  }
+}
+
 function attach(ws, room, player) {
   const conns = sockets.get(room.code);
   const old = conns.get(player.id);
@@ -167,6 +265,12 @@ function handleMessage(ws, data) {
       const room = createRoom();
       try {
         const player = room.addPlayer(data.name);
+        if (data.solo) {
+          // Modo solo: sala cerrada con bots listos para jugar.
+          room.locked = true;
+          const count = Math.min(Math.max(Number.parseInt(data.bots, 10) || 3, 1), 5);
+          for (let i = 0; i < count; i++) room.addBot(player.id, data.level || 'normal');
+        }
         attach(ws, room, player);
       } catch (err) {
         rooms.delete(room.code);
@@ -177,7 +281,14 @@ function handleMessage(ws, data) {
     }
     case 'join': {
       if (session) throw new GameError('Ya estás en una sala.');
-      const room = getRoom(data.code);
+      checkJoinLimit(ws);
+      let room;
+      try {
+        room = getRoom(data.code);
+      } catch (err) {
+        countJoinFail(ws);
+        throw err;
+      }
       attach(ws, room, room.addPlayer(data.name));
       return;
     }
@@ -224,6 +335,27 @@ function handleMessage(ws, data) {
       return room.makeHost(me, String(data.playerId));
     case 'chat':
       return room.sendChat(me, data.text);
+    case 'addBot':
+      room.addBot(me, String(data.level || 'normal'));
+      return undefined;
+    case 'lock':
+      return room.setLocked(me, data.locked);
+    case 'ready':
+      return room.setReady(me, Boolean(data.ready));
+    case 'voiceJoin':
+      return room.voiceJoin(me);
+    case 'voiceLeave':
+      return room.voiceLeave(me);
+    case 'voiceMute':
+      return room.voiceMute(me, data.muted);
+    case 'rtc': {
+      // Señalización WebRTC: solo pasamos el mensaje entre dos personas del chat de voz.
+      const to = String(data.to || '');
+      if (!room.inVoice(me) || !room.inVoice(to)) return undefined;
+      const target = sockets.get(room.code)?.get(to);
+      if (target) send(target, { type: 'rtc', from: me, signal: data.signal });
+      return undefined;
+    }
     case 'leave': {
       sockets.get(room.code)?.delete(me);
       ws.session = null;
@@ -251,7 +383,9 @@ function start(port = PORT, options = {}) {
   const server = http.createServer(serveStatic);
   const wss = new WebSocketServer({ server, maxPayload: 16 * 1024 });
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
+    // Detrás de Render/proxy la IP real viene en X-Forwarded-For.
+    ws.ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
     ws.isAlive = true;
     ws.session = null;
     ws.budget = { count: 0, since: Date.now() };
