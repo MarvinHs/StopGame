@@ -206,3 +206,44 @@ test('modo solo, límite de códigos equivocados y señalización de voz', async
 
   for (const b of [solo, guesser, ana, beto]) b.close();
 });
+
+test('chat principal y salas abiertas por WebSocket', async (t) => {
+  const { server, wss, port } = await start(0, { timing: { countdownMs: 50, collectMs: 50, reconnectMs: 200 } });
+  t.after(() => { for (const c of wss.clients) c.terminate(); wss.close(); server.close(); });
+
+  const ana = new Bot(port);
+  const beto = new Bot(port);
+  await Promise.all([ana.ready, beto.ready]);
+  beto.send({ type: 'lobbyWatch' });
+  await beto.waitFor((m) => m.type === 'lobby', 'historial');
+
+  // Ana crea una sala y la comparte
+  ana.send({ type: 'create', name: 'Ana' });
+  const { code } = await ana.waitFor((m) => m.type === 'joined');
+  ana.send({ type: 'shareRoom' });
+  const invite = await beto.waitFor((m) => m.type === 'lobbyMessage' && m.message.kind === 'invite', 'invitación');
+  assert.equal(invite.message.code, code);
+  const roomsMsg = await beto.waitFor((m) => m.type === 'lobbyRooms' && m.rooms.some((r) => r.code === code), 'sala abierta');
+  assert.equal(roomsMsg.rooms[0].host, 'Ana');
+
+  // Beto escribe; desde una sala no se puede escribir al chat principal
+  beto.send({ type: 'lobbySay', name: 'Beto', text: '¡Voy pa allá!' });
+  await beto.waitFor((m) => m.type === 'lobbyMessage' && m.message.name === 'Beto', 'mensaje de Beto');
+  ana.send({ type: 'lobbySay', name: 'Ana', text: 'hola' });
+  await ana.waitFor((m) => m.type === 'error' && /pantalla de inicio/.test(m.message), 'error en sala');
+
+  // Beto entra con el código y deja de recibir el chat principal
+  beto.send({ type: 'join', name: 'Beto', code });
+  await beto.waitFor((m) => m.type === 'joined', 'Beto en la sala');
+  const before = beto.messages.length;
+  const carla = new Bot(port);
+  await carla.ready;
+  carla.send({ type: 'lobbyWatch' });
+  await carla.waitFor((m) => m.type === 'lobby');
+  carla.send({ type: 'lobbySay', name: 'Carla', text: 'hola gente' });
+  await carla.waitFor((m) => m.type === 'lobbyMessage' && m.message.name === 'Carla');
+  await new Promise((r) => setTimeout(r, 100));
+  assert.ok(!beto.messages.slice(before).some((m) => m.type === 'lobbyMessage'), 'Beto ya no está en el chat principal');
+
+  for (const b of [ana, beto, carla]) b.close();
+});

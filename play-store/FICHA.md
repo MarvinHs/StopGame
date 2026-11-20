@@ -23,6 +23,10 @@ Sale una letra y todos corren a llenar Nombre, Apellido, Ciudad o País, Animal,
 • Juega desde cualquier lugar: Wi-Fi, datos, en la misma casa o en otro país.
 • Hasta 15 jugadores por sala.
 
+💬 CHAT PRINCIPAL
+• Habla con la gente conectada antes de entrar, busca con quién jugar y comparte tu sala.
+• Ve las salas abiertas y entra con un toque.
+
 🤖 JUEGA SOLO CONTRA BOTS
 • ¿No hay nadie? Practica contra bots dominicanos en nivel Fácil, Normal o Difícil.
 • También puedes mezclar personas y bots en la misma sala.

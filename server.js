@@ -11,7 +11,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer, WebSocket } = require('ws');
-const { Room, GameError } = require('./src/room');
+const { Room, GameError, LIMITS } = require('./src/room');
+const { Lobby, LOBBY_LIMITS } = require('./src/lobby');
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -158,6 +159,31 @@ function newRoomCode() {
   throw new GameError('No se pudo crear la sala, intenta otra vez.');
 }
 
+// Chat principal (pantalla de inicio) y lista de salas abiertas.
+function listPublicRooms() {
+  const now = Date.now();
+  const list = [];
+  for (const room of rooms.values()) {
+    if (!room.public || room.locked || room.closed) continue;
+    if (now - room.sharedAt > LOBBY_LIMITS.publicRoomMs) continue;
+    const humans = room.humans().filter((p) => p.connected);
+    if (!humans.length || room.players.size >= LIMITS.maxPlayers) continue;
+    const host = room.players.get(room.hostId);
+    list.push({
+      code: room.code,
+      host: host ? host.name : '',
+      players: room.players.size,
+      max: LIMITS.maxPlayers,
+      phase: room.phase,
+      round: room.round,
+      rounds: room.settings.rounds,
+    });
+  }
+  return list.slice(0, 20);
+}
+
+const lobby = new Lobby({ send: (ws, data) => send(ws, data), listRooms: listPublicRooms });
+
 const pendingBroadcast = new Set();
 
 function broadcast(room) {
@@ -245,6 +271,7 @@ function attach(ws, room, player) {
   }
   conns.set(player.id, ws);
   ws.session = { code: room.code, playerId: player.id };
+  lobby.unwatch(ws);
   send(ws, { type: 'joined', code: room.code, playerId: player.id, token: player.token });
   broadcast(room);
 }
@@ -305,6 +332,20 @@ function handleMessage(ws, data) {
     case 'ping':
       send(ws, { type: 'pong', t: data.t });
       return;
+    case 'lobbyWatch':
+      if (!session) lobby.watch(ws);
+      return;
+    case 'lobbyUnwatch':
+      lobby.unwatch(ws);
+      return;
+    case 'lobbySay':
+      if (session) throw new GameError('El chat principal es desde la pantalla de inicio.');
+      lobby.say(ws, data.name, data.text);
+      return;
+    case 'lobbyReport':
+      lobby.report(ws, String(data.id || ''));
+      send(ws, { type: 'notice', message: 'Gracias, recibimos tu reporte.' });
+      return;
     default:
       break;
   }
@@ -335,6 +376,13 @@ function handleMessage(ws, data) {
       return room.makeHost(me, String(data.playerId));
     case 'chat':
       return room.sendChat(me, data.text);
+    case 'shareRoom': {
+      const player = room.players.get(me);
+      lobby.shareRoom(ws, room, player ? player.name : '');
+      send(ws, { type: 'notice', message: '📣 Compartiste la sala en el chat principal.' });
+      room.addSystemChat(`📣 ${player ? player.name : 'Alguien'} compartió la sala en el chat principal.`);
+      return undefined;
+    }
     case 'addBot':
       room.addBot(me, String(data.level || 'normal'));
       return undefined;
@@ -417,8 +465,8 @@ function start(port = PORT, options = {}) {
       }
     });
 
-    ws.on('close', () => onDisconnect(ws));
-    ws.on('error', () => onDisconnect(ws));
+    ws.on('close', () => { lobby.unwatch(ws); onDisconnect(ws); });
+    ws.on('error', () => { lobby.unwatch(ws); onDisconnect(ws); });
   });
 
   // Detecta conexiones muertas (celular que perdió la señal, etc.).
@@ -432,7 +480,9 @@ function start(port = PORT, options = {}) {
       ws.ping();
     }
   }, 20000);
-  wss.on('close', () => clearInterval(heartbeat));
+  // La lista de salas abiertas se refresca sola (cambian jugadores, rondas...).
+  const roomsTicker = setInterval(() => lobby.refreshRooms(), 4000);
+  wss.on('close', () => { clearInterval(heartbeat); clearInterval(roomsTicker); });
 
   return new Promise((resolve) => {
     server.listen(port, () => {

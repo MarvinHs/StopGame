@@ -125,6 +125,7 @@
       $('connBanner').hidden = true;
       if (session) send({ type: 'resume', ...session });
       else if (pending) send(pending);
+      else if (lobbyActive) send({ type: 'lobbyWatch' });
     });
 
     ws.addEventListener('message', (event) => {
@@ -135,7 +136,8 @@
 
     ws.addEventListener('close', () => {
       ws = null;
-      if (!allowReconnect || (!session && !pending)) return;
+      if (lobbyActive && !session) $('lobbyOnline').textContent = 'reconectando…';
+      if (!allowReconnect || (!session && !pending && !lobbyActive)) return;
       if (session) $('connBanner').hidden = false;
       const wait = Math.min(10000, 800 * 2 ** retry++);
       reconnectTimer = setTimeout(connect, wait);
@@ -158,6 +160,7 @@
 
   function goHome(message, kind) {
     voiceLeave(true);
+    startLobby();
     saveSession(null);
     pending = null;
     state = null;
@@ -173,6 +176,7 @@
     switch (msg.type) {
       case 'joined':
         pending = null;
+        lobbyActive = false;
         saveSession({ code: msg.code, playerId: msg.playerId, token: msg.token });
         if (voice.joined) voiceRejoin();
         history.replaceState(null, '', `?sala=${msg.code}`);
@@ -183,6 +187,30 @@
         break;
       case 'rtc':
         handleSignal(msg.from, msg.signal);
+        break;
+      case 'lobby':
+        lobbyMessages = msg.messages;
+        renderLobbyChat();
+        renderPublicRooms(msg.rooms);
+        setOnline(msg.online);
+        break;
+      case 'lobbyMessage':
+        lobbyMessages.push(msg.message);
+        if (lobbyMessages.length > 80) lobbyMessages.shift();
+        renderLobbyChat();
+        break;
+      case 'lobbyRemove':
+        lobbyMessages = lobbyMessages.filter((m) => m.id !== msg.id);
+        renderLobbyChat();
+        break;
+      case 'lobbyOnline':
+        setOnline(msg.online);
+        break;
+      case 'lobbyRooms':
+        renderPublicRooms(msg.rooms);
+        break;
+      case 'notice':
+        toast(msg.message, 'ok');
         break;
       case 'event':
         if (msg.event.kind === 'stop') sounds.stop();
@@ -252,6 +280,101 @@
     if (e.key !== 'Enter') return;
     if ($('codeInput').value.trim()) join();
     else $('btnCreate').click();
+  });
+
+  // ───────────────────────── Chat principal ─────────────────────────
+  let lobbyActive = false;
+  let lobbyMessages = [];
+  let blocked = new Set();
+  try { blocked = new Set(JSON.parse(storage.get('localStorage', 'stop.blocked')) || []); } catch { /* vacío */ }
+
+  function startLobby() {
+    lobbyActive = true;
+    allowReconnect = true;
+    if (!send({ type: 'lobbyWatch' })) connect();
+  }
+
+  function setOnline(n) {
+    $('lobbyOnline').textContent = `🟢 ${n} ${n === 1 ? 'persona' : 'personas'} aquí`;
+  }
+
+  const timeFmt = new Intl.DateTimeFormat('es-DO', { hour: 'numeric', minute: '2-digit' });
+
+  function joinCode(code) {
+    $('codeInput').value = code;
+    if (!$('nameInput').value.trim()) {
+      toast('Escribe tu nombre y toca Entrar.', 'error');
+      $('nameInput').focus();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    join();
+  }
+
+  function renderLobbyChat() {
+    const list = $('lobbyList');
+    const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 60;
+    const visible = lobbyMessages.filter((m) => !blocked.has(m.name.toLowerCase()));
+    fill(list, visible.length ? visible.map((m) => {
+      const mine = m.name.toLowerCase() === ($('nameInput').value.trim() || '').toLowerCase();
+      const li = h('li', { class: m.kind === 'invite' ? 'invite' : '' },
+        h('span', { class: 'from', text: m.kind === 'invite' ? `📣 ${m.name}` : `${m.name}:` }),
+        m.text,
+        m.kind === 'invite' && m.code ? h('button', {
+          class: 'join-btn', text: `Entrar a ${m.code}`,
+          onclick: (e) => { e.stopPropagation(); joinCode(m.code); },
+        }) : null,
+        h('span', { class: 'when', text: timeFmt.format(new Date(m.at)) }),
+        mine ? null : h('div', { class: 'acts' },
+          h('button', {
+            text: `🙈 Ocultar a ${m.name}`,
+            onclick: (e) => {
+              e.stopPropagation();
+              blocked.add(m.name.toLowerCase());
+              storage.set('localStorage', 'stop.blocked', JSON.stringify([...blocked]));
+              toast(`Ya no verás los mensajes de ${m.name}.`, 'ok');
+              renderLobbyChat();
+            },
+          }),
+          h('button', {
+            text: '🚩 Reportar',
+            onclick: (e) => {
+              e.stopPropagation();
+              send({ type: 'lobbyReport', id: m.id });
+              li.classList.remove('open');
+            },
+          })));
+      li.addEventListener('click', () => { if (!mine) li.classList.toggle('open'); });
+      return li;
+    }) : h('li', { class: 'lobby-empty', text: 'Nadie ha escrito todavía. ¡Saluda! 👋' }));
+    if (nearBottom || list.scrollTop === 0) list.scrollTop = list.scrollHeight;
+  }
+
+  const PHASE_LABEL = { lobby: 'esperando jugadores', countdown: 'jugando', playing: 'jugando', collecting: 'jugando', review: 'revisando', final: 'terminó la partida' };
+
+  function renderPublicRooms(rooms) {
+    fill($('publicRooms'), rooms && rooms.length ? [
+      h('strong', { class: 'small', text: '🟢 Salas abiertas' }),
+      ...rooms.map((r) => h('div', { class: 'proom' },
+        h('span', { class: 'pcode', text: r.code }),
+        h('span', { class: 'pinfo', text: `de ${r.host} · ${r.players}/${r.max} · ${r.phase === 'lobby' || r.phase === 'final' ? PHASE_LABEL[r.phase] : `${PHASE_LABEL[r.phase]} (ronda ${r.round} de ${r.rounds})`}` }),
+        h('button', { class: 'btn btn-red btn-sm', text: 'Entrar', onclick: () => joinCode(r.code) }))),
+    ] : []);
+  }
+
+  $('lobbyForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = $('lobbyInput').value.trim();
+    if (!text) return;
+    const name = $('nameInput').value.trim();
+    if (!name) {
+      toast('Primero escribe tu nombre arriba.', 'error');
+      $('nameInput').focus();
+      return;
+    }
+    storage.set('localStorage', 'stop.name', name);
+    if (send({ type: 'lobbySay', name, text })) $('lobbyInput').value = '';
+    else toast('Sin conexión. Intentando reconectar…', 'error');
   });
 
   // ───────────────────────── Barra superior ─────────────────────────
@@ -505,8 +628,10 @@
 
     $('btnStart').hidden = !host;
     $('waitHost').hidden = host;
+    $('btnShare').hidden = state.locked;
   }
 
+  $('btnShare').addEventListener('click', () => send({ type: 'shareRoom' }));
   $('btnAddBot').addEventListener('click', () => send({ type: 'addBot', level: $('botLevel').value }));
   $('btnLock').addEventListener('click', () => send({ type: 'lock', locked: !state.locked }));
 
@@ -955,6 +1080,7 @@
     connect(); // volver a la sala después de recargar la página
   } else {
     saveSession(null);
+    startLobby();
     if (codeParam) ($('nameInput').value ? $('btnJoin') : $('nameInput')).focus();
   }
 })();

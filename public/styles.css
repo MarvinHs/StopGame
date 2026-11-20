@@ -268,6 +268,28 @@ label { display: block; font-weight: 600; margin-bottom: 0.35rem; }
 .voice-card p { margin: 0 0 0.6rem; }
 #readyInfo { margin: 0; }
 
+/* Chat principal */
+.lobby-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.lobby-head h2 { margin: 0; }
+.online-pill { font-size: 0.8rem; font-weight: 700; color: var(--verde); background: #e7f6ee; padding: 0.2rem 0.6rem; border-radius: 999px; white-space: nowrap; }
+.lobby-intro { margin: 0.3rem 0 0.8rem; }
+.lobby-rules { margin: 0.5rem 0 0; }
+.public-rooms { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.8rem; }
+.public-rooms:empty { display: none; }
+.proom { display: flex; align-items: center; gap: 0.6rem; background: #f3f6fb; border: 1px solid var(--borde); border-radius: 12px; padding: 0.5rem 0.7rem; }
+.proom .pcode { font-weight: 900; letter-spacing: 0.15em; color: var(--azul); }
+.proom .pinfo { flex: 1; min-width: 0; font-size: 0.85rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lobby-list { max-height: 320px; min-height: 120px; background: #fafbfd; border: 1px solid #eef1f5; border-radius: 12px; padding: 0.4rem 0.6rem; }
+.lobby-list li { cursor: pointer; border-radius: 8px; padding: 0.3rem 0.35rem; }
+.lobby-list li:hover { background: #f0f3f8; }
+.lobby-list li.invite { background: #fff4e5; }
+.lobby-list .when { color: #9aa4b2; font-size: 0.72rem; margin-left: 0.35rem; }
+.lobby-list .acts { display: none; gap: 0.4rem; margin-top: 0.3rem; }
+.lobby-list li.open .acts { display: flex; }
+.lobby-list .acts button, .lobby-list .join-btn { border: 1px solid var(--borde); background: #fff; border-radius: 8px; padding: 0.15rem 0.5rem; font-size: 0.8rem; cursor: pointer; }
+.lobby-list .join-btn { border-color: var(--rojo); color: #fff; background: var(--rojo); font-weight: 700; margin-left: 0.4rem; }
+.lobby-empty { color: var(--muted); font-style: italic; cursor: default !important; }
+
 /* Páginas legales y enlaces */
 .legal h2 { margin-top: 1.2rem; color: var(--azul); }
 .legal li { margin: 0.35rem 0; }

@@ -18,6 +18,7 @@ Sale una letra, todos llenan **Nombre, Apellido, Ciudad o País, Animal, Fruta o
 
 ## Qué trae
 
+- **Chat principal** en la pantalla de inicio para hablar antes de entrar y buscar con quién jugar, con **salas abiertas** y botón para compartir tu sala. Tiene filtro de malas palabras, sin enlaces, límite de mensajes, ocultar y reportar.
 - **Modo solo contra bots** (Fácil, Normal o Difícil) y bots que se pueden agregar a cualquier sala. Escriben como una persona, poco a poco, con palabras dominicanas.
 - **Chat de voz** (WebRTC) para hasta 8 personas, con silenciar y un indicador de quién está hablando.
 - **Sala cerrada** 🔒 y límite de intentos para que nadie adivine códigos de salas ajenas.

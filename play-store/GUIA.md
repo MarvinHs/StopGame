@@ -37,7 +37,8 @@ El repo trae un proceso automático (`.github/workflows/android.yml`) que arma l
    - **Política de privacidad:** `https://stop-dominicano.onrender.com/privacidad`
    - **Anuncios:** No contiene anuncios.
    - **Acceso a la app:** Toda la funcionalidad está disponible sin restricciones (no hay inicio de sesión).
-   - **Clasificación de contenido:** categoría *Juego*. Cuando pregunte si los usuarios pueden interactuar o comunicarse entre sí, responde **Sí** (chat de texto y de voz). No hay violencia, compras ni apuestas.
+   - **Clasificación de contenido:** categoría *Juego*. Cuando pregunte si los usuarios pueden interactuar o comunicarse entre sí, responde **Sí** (chat público, chat de texto y de voz).
+   - **Contenido generado por usuarios:** declara que hay chat público y que tiene filtro de palabras, la opción de ocultar personas y la de reportar mensajes. Los reportes quedan en los registros de Render: búscalos con el texto `[chat principal] reporte`. No hay violencia, compras ni apuestas.
    - **Público objetivo:** **13 años o más**. Si marcas edades menores de 13, entras al programa de Familias, que es mucho más estricto con el chat de voz.
    - **Seguridad de los datos** (orientativo; revísalo tú, no soy abogado):
      - ¿Recopila o comparte datos? **Sí recopila, no comparte.**
