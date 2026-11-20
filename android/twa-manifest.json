@@ -35,5 +35,6 @@
   "isMetaQuest": false,
   "fullScopeUrl": "https://stop-dominicano.onrender.com/",
   "minSdkVersion": 24,
-  "orientationLock": false
+  "orientationLock": false,
+  "appVersion": "1.0.0"
 }
