@@ -56,7 +56,8 @@ Hecho en República Dominicana por SoportesRD.
 - **Etiquetas sugeridas:** Palabras, Multijugador, Casual, Fiesta
 
 ## Datos de contacto
-- **Correo:** soportesrd@gmail.com (cámbialo si prefieres otro)
+- **Correo público (lo ven los usuarios):** marvins.soportesrd@gmail.com
+- **Correo privado (cuenta, clasificación IARC, avisos de Google):** soportesrd@gmail.com
 - **Sitio web:** https://stop-dominicano.onrender.com
 - **Política de privacidad:** https://stop-dominicano.onrender.com/privacidad
 
