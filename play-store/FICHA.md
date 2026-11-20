@@ -45,7 +45,7 @@ Sale una letra y todos corren a llenar Nombre, Apellido, Ciudad o País, Animal,
 • Escoge el tiempo de cada ronda, cuántas rondas, las categorías (Pelotero, Artista, Marca, Carro y más) y las letras que pueden salir.
 • Cierra la sala para que nadie más entre.
 
-Sin registro, sin anuncios y sin pedir datos personales. Solo escribe tu nombre y ¡a jugar!
+Sin registro ni anuncios: solo escribe tu nombre y ¡a jugar!
 
 Hecho en República Dominicana por SoportesRD.
 ```
