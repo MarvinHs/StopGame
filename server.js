@@ -41,7 +41,71 @@ const MIME = {
 
 // ───────────────────────── HTTP (archivos estáticos) ─────────────────────────
 
+// ───────────────────────── Testers de Android ─────────────────────────
+// Jugadores que dejan su Gmail para ser testers de la app en Google Play.
+// Se guardan en memoria y en el registro de Render ("[tester]"), y el dueño
+// los ve en /api/testers?clave=TESTERS_KEY.
+const testers = new Map(); // email -> { apps, at }
+const testerHits = new Map(); // ip -> { count, since }
+const TESTER_APPS = ['stop', 'simulador'];
+
+function readJson(req, max = 2048) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (c) => {
+      body += c;
+      if (body.length > max) reject(new Error('muy grande'));
+    });
+    req.on('end', () => {
+      try { resolve(JSON.parse(body || '{}')); } catch (e) { reject(e); }
+    });
+    req.on('error', reject);
+  });
+}
+
+async function handleTesterSignup(req, res) {
+  const json = (code, data) => res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify(data));
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  const now = Date.now();
+  const hit = testerHits.get(ip);
+  if (hit && now - hit.since < 3600000 && hit.count >= 5) return json(429, { ok: false, error: 'Demasiados intentos. Prueba en un rato.' });
+  if (!hit || now - hit.since >= 3600000) testerHits.set(ip, { count: 1, since: now });
+  else hit.count += 1;
+
+  let data;
+  try { data = await readJson(req); } catch { return json(400, { ok: false, error: 'Datos inválidos.' }); }
+  const email = String(data.email || '').trim().toLowerCase();
+  if (!/^[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,190}\.[a-z]{2,}$/.test(email)) {
+    return json(400, { ok: false, error: 'Escribe un correo válido (el de tu cuenta de Google Play).' });
+  }
+  const apps = (Array.isArray(data.apps) ? data.apps : ['stop']).filter((a) => TESTER_APPS.includes(a));
+  if (!apps.length) apps.push('stop');
+  const prev = testers.get(email);
+  testers.set(email, { apps: [...new Set([...(prev ? prev.apps : []), ...apps])], at: prev ? prev.at : new Date().toISOString() });
+  console.log(`[tester] ${email} apps=${testers.get(email).apps.join(',')}`);
+  return json(200, { ok: true });
+}
+
+function handleTesterList(url, res) {
+  const key = process.env.TESTERS_KEY;
+  if (!key || url.searchParams.get('clave') !== key) {
+    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' }).end('No autorizado');
+    return;
+  }
+  const list = [...testers.entries()].map(([email, v]) => ({ email, ...v }));
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+    .end(JSON.stringify({ total: list.length, testers: list }, null, 2));
+}
+
 function serveStatic(req, res) {
+  if (req.method === 'POST' && req.url.split('?')[0] === '/api/tester') {
+    handleTesterSignup(req, res).catch(() => res.writeHead(500).end());
+    return;
+  }
+  if (req.method === 'GET' && req.url.startsWith('/api/testers')) {
+    handleTesterList(new URL(req.url, 'http://localhost'), res);
+    return;
+  }
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405).end();
     return;

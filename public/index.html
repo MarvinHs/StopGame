@@ -23,6 +23,31 @@
       <p class="tagline">El de toda la vida: letra, lápiz… ¡y el primero que termine dice STOP!</p>
     </header>
 
+    <section id="testerCard" class="card tester-card" hidden>
+      <button id="testerClose" class="tester-close" type="button" aria-label="Cerrar">×</button>
+      <h2>📲 ¡STOP llega a Google Play!</h2>
+      <p>Ayúdanos a publicarlo: Google exige que <strong>12 personas</strong> lo prueben durante <strong>14 días</strong> antes de dejarlo salir para todo el mundo.</p>
+      <form id="testerForm" class="tester-form">
+        <label for="testerEmail">Tu correo de Google Play</label>
+        <input id="testerEmail" type="email" placeholder="tucorreo@gmail.com" autocomplete="email" required>
+        <label class="tester-check"><input id="testerSim" type="checkbox"><span>También quiero probar el <strong>Simulador de Entrevista de Visa</strong></span></label>
+        <button class="btn btn-red btn-lg" type="submit">Quiero ser tester</button>
+        <p class="muted small">Usa el correo de la cuenta de Google que tiene tu Play Store. Solo lo usamos para darte acceso a la prueba. <a href="/privacidad">Privacidad</a></p>
+      </form>
+      <div id="testerDone" class="tester-done" hidden>
+        <p><strong>¡Gracias! 🙌 Te anotamos.</strong></p>
+        <ol>
+          <li>Te damos acceso en <strong>menos de 24 horas</strong>.</li>
+          <li>Luego abre este enlace en tu celular y toca <strong>“Convertirse en tester”</strong>:<br>
+            <a href="https://play.google.com/apps/testing/com.soportesrd.stopdominicano" target="_blank" rel="noopener">🛑 Unirme a la prueba de STOP</a>
+            <span id="testerSimLink" hidden><br><a href="https://play.google.com/apps/testing/com.marvinhs.simuladorvisa" target="_blank" rel="noopener">🛂 Unirme a la prueba del Simulador</a></span>
+          </li>
+          <li>Instálala desde Play Store y <strong>déjala instalada 14 días</strong>. Ábrela de vez en cuando 😉</li>
+        </ol>
+        <p class="muted small">Si el enlace dice que no tienes acceso, espera un poco más y vuelve a intentarlo.</p>
+      </div>
+    </section>
+
     <section class="card">
       <label for="nameInput">Tu nombre</label>
       <input id="nameInput" type="text" maxlength="20" placeholder="Ej: Marvin" autocomplete="nickname">

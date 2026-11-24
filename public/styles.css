@@ -268,6 +268,19 @@ label { display: block; font-weight: 600; margin-bottom: 0.35rem; }
 .voice-card p { margin: 0 0 0.6rem; }
 #readyInfo { margin: 0; }
 
+/* Invitación a testers de Android */
+.tester-card { position: relative; border: 3px solid var(--rojo); background: linear-gradient(180deg, #fff 0%, #fff6f7 100%); }
+.tester-card h2 { color: var(--rojo); padding-right: 2rem; }
+.tester-card p { margin: 0.4rem 0; }
+.tester-close { position: absolute; top: 0.5rem; right: 0.7rem; border: none; background: none; font-size: 1.6rem; color: var(--muted); cursor: pointer; line-height: 1; }
+.tester-form { margin-top: 0.8rem; }
+.tester-form input[type="email"] { width: 100%; padding: 0.7rem 0.85rem; border: 2px solid var(--borde); border-radius: 12px; font-size: 1rem; }
+.tester-check { display: flex; gap: 0.5rem; align-items: flex-start; font-weight: 500; margin: 0.6rem 0 0; }
+.tester-check input { margin-top: 0.25rem; }
+.tester-done ol { padding-left: 1.2rem; }
+.tester-done li { margin: 0.5rem 0; }
+.tester-done a { color: var(--azul-2); font-weight: 700; }
+
 /* Chat principal */
 .lobby-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .lobby-head h2 { margin: 0; }

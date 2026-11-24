@@ -1066,6 +1066,50 @@
     if (document.visibilityState === 'visible' && session && !ws && allowReconnect) connect();
   });
 
+  // ───────────────────────── Invitación a testers (Android) ─────────────────────────
+  (() => {
+    const forced = new URLSearchParams(location.search).has('testers');
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const inApp = matchMedia('(display-mode: standalone)').matches || document.referrer.startsWith('android-app://');
+    const state = storage.get('localStorage', 'stop.tester'); // 'cerrado' | 'anotado'
+    if (!forced && (!isAndroid || inApp || state === 'cerrado')) return;
+    $('testerCard').hidden = false;
+    if (state === 'anotado' && !forced) {
+      $('testerForm').hidden = true;
+      $('testerDone').hidden = false;
+      $('testerSimLink').hidden = storage.get('localStorage', 'stop.testerSim') !== '1';
+    }
+    $('testerClose').addEventListener('click', () => {
+      $('testerCard').hidden = true;
+      if (storage.get('localStorage', 'stop.tester') !== 'anotado') storage.set('localStorage', 'stop.tester', 'cerrado');
+    });
+    $('testerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = $('testerEmail').value.trim();
+      const sim = $('testerSim').checked;
+      const btn = $('testerForm').querySelector('button');
+      btn.disabled = true;
+      try {
+        const r = await fetch('/api/tester', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, apps: sim ? ['stop', 'simulador'] : ['stop'] }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !data.ok) throw new Error(data.error || 'No se pudo enviar. Intenta otra vez.');
+        storage.set('localStorage', 'stop.tester', 'anotado');
+        storage.set('localStorage', 'stop.testerSim', sim ? '1' : '0');
+        $('testerForm').hidden = true;
+        $('testerDone').hidden = false;
+        $('testerSimLink').hidden = !sim;
+      } catch (err) {
+        toast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  })();
+
   // ───────────────────────── Arranque ─────────────────────────
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));

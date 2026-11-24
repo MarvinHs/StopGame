@@ -247,3 +247,27 @@ test('chat principal y salas abiertas por WebSocket', async (t) => {
 
   for (const b of [ana, beto, carla]) b.close();
 });
+
+test('anotarse como tester de Android', async (t) => {
+  process.env.TESTERS_KEY = 'clave-prueba';
+  const { server, wss, port } = await start(0);
+  t.after(() => { wss.close(); server.close(); });
+  const post = (body) => new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port, path: '/api/tester', method: 'POST', headers: { 'Content-Type': 'application/json' } }, (res) => {
+      let b = '';
+      res.on('data', (c) => { b += c; });
+      res.on('end', () => resolve({ status: res.statusCode, body: JSON.parse(b) }));
+    });
+    req.on('error', reject);
+    req.end(JSON.stringify(body));
+  });
+  assert.equal((await post({ email: 'no-es-correo' })).status, 400);
+  assert.equal((await post({ email: 'Pana@Gmail.com', apps: ['stop', 'simulador', 'otra'] })).body.ok, true);
+  assert.equal((await get(port, '/api/testers?clave=mala')).status, 403);
+  const list = JSON.parse((await get(port, '/api/testers?clave=clave-prueba')).body);
+  assert.equal(list.total, 1);
+  assert.equal(list.testers[0].email, 'pana@gmail.com');
+  assert.deepEqual(list.testers[0].apps, ['stop', 'simulador']);
+  for (let i = 0; i < 4; i++) await post({ email: `x${i}@gmail.com` });
+  assert.equal((await post({ email: 'y@gmail.com' })).status, 429, 'límite de intentos por IP');
+});

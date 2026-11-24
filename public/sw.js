@@ -1,5 +1,5 @@
 /* STOP Dominicano — service worker: abre rápido y muestra un aviso si no hay internet. */
-const VERSION = 'stop-v4';
+const VERSION = 'stop-v5';
 const CORE = ['/', '/styles.css', '/app.js', '/offline.html', '/manifest.webmanifest', '/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
